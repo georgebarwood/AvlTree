@@ -33,10 +33,15 @@ class AvlExample
     SortedSet<int> s2 = new SortedSet<int>(); 
     s1[ 1 ] = true; s1[ 3 ] = true; s1[ 4 ] = true; s1[ 6 ] = true;
     s2[ 2 ] = true; s2[ 3 ] = true; s2[ 5 ] = true; s2[ 6 ] = true;
+
     Console.WriteLine( "Should print 3, 6" );
-    foreach ( int e in s1 & s2 ) Console.WriteLine( e );    
+    foreach ( int e in s1 & s2 ) Console.WriteLine( e );  
+  
     Console.WriteLine( "Should print 1..6" );
     foreach ( int e in s1 | s2 ) Console.WriteLine( e );  
+
+    Console.WriteLine( "Should print 1, 4" );
+    foreach ( int e in s1 - s2 ) Console.WriteLine( e ); 
 
     SortedDictionary<int,string> dict = new SortedDictionary<int,string>( "" );
 
@@ -154,6 +159,40 @@ class SortedSet<T> : AvlTree<T>, Generic.IEnumerable<T>
     {
       result.Append( eb.Current );
       bok = eb.MoveNext();
+    }
+    return result;
+  }
+
+  public static SortedSet<T> operator - ( SortedSet<T> a, SortedSet<T> b )
+  // Set difference.
+  {
+    SortedSet<T> result = new SortedSet<T>( a.Compare );
+    Generic.IEnumerator<T> ea = a.GetEnumerator();
+    Generic.IEnumerator<T> eb = b.GetEnumerator();
+    bool aok = ea.MoveNext();
+    bool bok = eb.MoveNext();
+    while ( aok && bok )
+    {
+      int compare = a.Compare( ea.Current,  eb.Current );
+      if ( compare == 0 )
+      {
+        aok = ea.MoveNext();
+        bok = eb.MoveNext();
+      }
+      else if ( compare < 0 )
+      {
+        result.Append( ea.Current );
+        aok = ea.MoveNext();
+      }
+      else
+      {
+        bok = eb.MoveNext();
+      }        
+    }
+    while ( aok )
+    {
+      result.Append( ea.Current );
+      aok = ea.MoveNext();
     }
     return result;
   }
