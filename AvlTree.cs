@@ -8,7 +8,7 @@ class AvlExample
   {
     SortedSet<long> set = new SortedSet<long>();
 
-    int testSize = 5 * 1000 * 1000;
+    int testSize = 50 * 1000 * 1000;
 
     // Insert elements 0, 10, 20 ... into the set.
     for ( int i = 0; i < testSize; i += 10 ) 
@@ -50,7 +50,7 @@ class AvlExample
     dict[ 100 ] = "there";
 
     Console.WriteLine( "Should print Hello there" );
-    foreach ( int i in dict.Keys ) Console.WriteLine( dict[ i ] );
+    foreach ( Generic.KeyValuePair<int,string> p in dict ) Console.WriteLine( p.Value );
   }
 }
 
@@ -84,13 +84,51 @@ class SortedSet<T> : AvlTree<T>, Generic.IEnumerable<T>
   public Generic.IEnumerator<T> GetEnumerator() 
   // Iterate over the set elements.
   {   
-    if ( Root != null ) foreach( T key in Root ) yield return key;
+    if ( Root != null ) foreach( Node n in Root ) yield return n.Key;
   }
 
   public Generic.IEnumerable<T> Range( T start, T end )
-  // Interate over the set elements in the specified range.
+  // Iterate over the set elements starting from the specified element.
   {
-    if ( Root != null ) foreach( T key in Root.Range( start, end, Compare ) ) yield return key;
+    if ( Root != null ) foreach( Node n in Root.Range( start, Compare ) ) yield return n.Key;
+  }
+
+  public static bool operator == ( SortedSet<T> a, SortedSet<T> b )
+  // Set equality.
+  {
+    Generic.IEnumerator<T> ea = a.GetEnumerator();
+    Generic.IEnumerator<T> eb = b.GetEnumerator();
+    bool aok = ea.MoveNext();
+    bool bok = eb.MoveNext();
+    while ( aok && bok )
+    {
+      int compare = a.Compare( ea.Current, eb.Current );
+      if ( compare == 0 )
+      {
+        aok = ea.MoveNext();
+        bok = eb.MoveNext();
+      }
+      else return false;
+    }
+    return true;
+  }
+
+  public static bool operator != ( SortedSet<T> a, SortedSet<T> b )
+  // Set inequality.
+  {
+    return ! ( a == b );
+  }
+
+  public override bool Equals( System.Object o )
+  {
+    return this == (SortedSet<T>)o;
+  }
+
+  public override int GetHashCode()
+  {
+    int result = 0;
+    foreach ( T x in this ) result += result * 4 + x.GetHashCode();
+    return result;
   }
 
   public static SortedSet<T> operator & ( SortedSet<T> a, SortedSet<T> b )
@@ -209,7 +247,6 @@ class SortedSet<T> : AvlTree<T>, Generic.IEnumerable<T>
   }
 }
 
-
 class SortedDictionary<TKey,TValue> : AvlTree<TKey>
 // Generic sorted dictionary implemented as a height-balanced binary search tree.
 {
@@ -242,26 +279,36 @@ class SortedDictionary<TKey,TValue> : AvlTree<TKey>
     } 
   }
 
-  public Generic.IEnumerable<TKey> Keys 
-  // Iterate over all the dictionary keys.
+  public Generic.IEnumerator<Generic.KeyValuePair<TKey,TValue>> GetEnumerator()
+  // Iterate over the whole dictionary.
   {
-    get
-    {   
-      if ( Root != null ) foreach( TKey key in Root ) yield return key;
-    }
+    if ( Root != null ) 
+      foreach( Node n in Root ) 
+        yield return new Generic.KeyValuePair<TKey,TValue>( n.Key, ((Pair)n).Value );
   }
 
-  public Generic.IEnumerable<TKey> KeyRange( TKey start, TKey end )
-  // Iterate over the specified range of dictionary keys.
+  public  Generic.IEnumerator<Generic.KeyValuePair<TKey,TValue>> FromKey( TKey start )
+  // Iterate over the specified range of keys.
   {
-    if ( Root != null ) foreach( TKey key in Root.Range( start, end, Compare ) ) yield return key;
+    if ( Root != null ) 
+      foreach( Node n in Root.Range( start, Compare ) ) 
+        yield return new Generic.KeyValuePair<TKey,TValue>( n.Key, ((Pair)n).Value );
+  }
+
+  public Generic.IEnumerator<Generic.KeyValuePair<TKey,TValue>> FromIndex( int start )
+  // Iterate starting from the specified index psoition.
+  {
+    if ( Root != null ) foreach( Node n in Root.Index( start ) ) 
+    {
+      yield return new Generic.KeyValuePair<TKey,TValue>( n.Key, ((Pair)n).Value );
+    }
   }
 
   private readonly TValue DefaultValue;
 
-  private TValue AssignValue;
+  protected TValue AssignValue;
 
-  private class Pair : AvlTree<TKey>.Node
+  protected class Pair : AvlTree<TKey>.Node
   {
     public TValue Value;
 
@@ -288,6 +335,15 @@ abstract class AvlTree<T>
 // Height-balanced binary search tree.
 {
   public delegate int DCompare( T key1, T key2 );
+
+  public int Count
+  {
+    get 
+    // Returns number of nodes in the tree.
+    {
+      return Root.Count;
+    }
+  }
 
   protected AvlTree() 
   // Initialise with default compare function.
@@ -359,28 +415,54 @@ abstract class AvlTree<T>
       Key = key;
     }
 
-    public Generic.IEnumerator<T> GetEnumerator() 
+    public int Count
     {
-      if ( Left != null ) foreach ( T key in Left ) yield return key;
-      yield return Key;
-      if ( Right != null ) foreach ( T key in Right ) yield return key;      
+      get 
+      // Returns number of nodes in the tree.
+      {
+        if ( Balance == LeftHigher )
+          return 2 * Left.Count;
+        else if ( Balance == RightHigher )
+          return 2 * Right.Count;
+        else // ( Balance == Balanced ) 
+          return Left == null ? 1 : 1 + 2 * Left.Count;
+      }
     }
 
-    public Generic.IEnumerable<T> Range( T start, T end, DCompare compare )
+    public Generic.IEnumerator<Node> GetEnumerator() 
+    {
+      if ( Left != null ) foreach ( Node n in Left ) yield return n;
+      yield return this;
+      if ( Right != null ) foreach ( Node n in Right ) yield return n;      
+    }
+
+    public Generic.IEnumerable<Node> Range( T start, DCompare compare )
     {
       int cstart = compare( start, Key );
-      int cend = compare( end, Key );
       if ( cstart < 0 && Left != null )
       {
-        foreach ( T key in Left.Range( start, end, compare ) ) yield return key;
+        foreach ( Node n in Left.Range( start, compare ) ) yield return n;
       }
-      if ( cstart <= 0 && cend >= 0 ) yield return Key;
-      if ( cend > 0 && Right != null )
+      if ( cstart <= 0 ) yield return this;
+      if ( Right != null )
       {
-        foreach ( T key in Right.Range( start, end, compare ) ) yield return key;
+        foreach ( Node n in Right.Range( start, compare ) ) yield return n;
       }
     }
 
+    public Generic.IEnumerable<Node> Index( int start )
+    {
+      int leftCount = Left == null ? 0 : Left.Count;
+      if ( start < leftCount ) foreach ( Node n in Left.Index( start ) ) 
+      {
+        yield return n;
+      }
+      yield return this;
+      foreach ( Node n in Right.Index( start - leftCount - 1 ) )
+      {
+        yield return n;
+      }
+    }
   } // Node
 
   // Fields.
